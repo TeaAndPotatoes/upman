@@ -20,22 +20,21 @@ fn main() {
         .open(config_filename)
         .expect("Unable to open or create file at current directory");
 
-    match matches.subcommand_name() {
-        Some("list") => list_tools(&config_file),
-        Some("run") => run_updates(&config_file),
-        Some("add") => {
-            // The value of input is required and add has been confirmed, so `input` can be parsed
-            config_file
-                .write_all(
-                    format!("{}\n\n",
-                        matches.subcommand_matches("add").unwrap()
-                            .value_of("input").unwrap()
-                    ).as_bytes(),
-                )
-                .expect("Unable to write to file");
-        }
-        None => println!("No subcommand was run"),
-        _ => println!("An unchecked subcommand was run"),
+    match matches.subcommand() {
+        ("list", _) => list_tools(&config_file),
+        ("run", _) => run_updates(&config_file),
+        ("add", Some(add_matches)) => config_file
+            .write_all(add_matches.value_of("input").unwrap().as_bytes())
+            .expect("Could not write to config file"),
+        ("remove", Some(remove_matches)) => {
+            // Unwrap command, as it is required 
+            match remove_matches.value_of("command").unwrap() {
+                "*" => config_file.set_len(0).expect("Unable to clear file"),
+                _ => println!("Other option")
+            };
+        },
+        ("", None) => println!("No subcommand was used"), // If no subcommand was used it'll match the tuple ("", None)
+        _ => unreachable!(), // If all subcommands are defined above, anything else is unreachable!()
     }
 }
 
@@ -49,6 +48,14 @@ fn create_app() -> App<'static, 'static> {
         )
         .subcommand(SubCommand::with_name("run")
             .about("Run each of the commands stored through add")
+        )
+        .subcommand(SubCommand::with_name("remove")
+            .about("Remove a specific command from the configuration file")
+            .arg(Arg::with_name("command")
+                .required(true)
+                .takes_value(true)
+                .help("the command to remove from the config file")
+            )
         )
         .subcommand(SubCommand::with_name("add")
             .about("Add a command to the list of tools to update")
