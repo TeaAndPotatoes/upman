@@ -3,33 +3,35 @@ extern crate clap;
 use clap::{App, Arg, SubCommand};
 use std::io::{BufRead, BufReader};
 use std::io::prelude::*;
-use std::fs::{File, OpenOptions};
+use std::fs::{File, OpenOptions, create_dir_all};
 use std::process::Command;
 
 fn main() {
     let app = create_app();
     let matches = app.get_matches();
 
-    let config_filename = "foo.txt";
+    let config_directory = format!("{}/.upman/", std::env::home_dir().unwrap().display());
+    create_dir_all(&config_directory).expect("Unable to create missing directories");
+    let config_filepath = format!("{}upman.conf", config_directory);
 
     let mut config_file = OpenOptions::new()
         .read(true)
         .write(true)
         .append(true)
         .create(true)
-        .open(config_filename)
+        .open(config_filepath)
         .expect("Unable to open or create file at current directory");
 
     match matches.subcommand() {
         ("list", _) => list_tools(&config_file),
         ("run", _) => run_updates(&config_file),
         ("add", Some(add_matches)) => config_file
-            .write_all(add_matches.value_of("input").unwrap().as_bytes())
+            .write_all(format!("{}\n", add_matches.value_of("input").unwrap()).as_bytes())
             .expect("Could not write to config file"),
         ("remove", Some(remove_matches)) => {
             // Unwrap command, as it is required 
             match remove_matches.value_of("command").unwrap() {
-                "*" => config_file.set_len(0).expect("Unable to clear file"),
+                "*" | "all" | "." => config_file.set_len(0).expect("Unable to clear file"),
                 _ => println!("Other option")
             };
         },
@@ -96,3 +98,7 @@ fn run_updates(file: &File) {
         }
     }
 }
+
+// fn remove_command(command: &str, file: &File) {
+    
+// }
