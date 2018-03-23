@@ -86,35 +86,36 @@ fn add_command(file_path: String, command: &str) {
 
 fn remove_command(file_path: String, command: &str) -> Result<(), std::io::Error> {
     match command {
-        "*" | "all" | "." => {
+        "all" | "." => {
             if confirm_selection() {
                 // Try creating file, which truncates file if found
                 File::create(&file_path)?;
             }
         }
-        val => {
+        _ => {
             // Try to open file at file_path, and create file if not found
-            let mut src_file = match File::open(&file_path) {
-                Ok(val) => val,
+            let src_file = match File::open(&file_path) {
+                Ok(file) => file,
                 Err(_) => OpenOptions::new()
                     .write(true)
                     .read(true)
                     .create(true)
                     .open(&file_path)?,
             };
-            let mut contents = String::new();
-
-            // Existence of file should be caught already, so try reading and removing command
-            src_file
-                .read_to_string(&mut contents)
-                .expect("Unable to read from file");
-            contents = str::replace(&contents, val, "");
-
+            // Existence of file has been verified already, so try reading and removing command
+            let contents: Vec<String> = BufReader::new(&src_file)
+                .lines()
+                .map(|line| line.unwrap())
+                .collect();
             drop(src_file); // Drop for re-opening in write mode
-            let mut write_file = File::create(&file_path)?;
 
-            // File is already opened in write mode, so throw error if unable to write
-            write!(write_file, "{}", contents).expect("Could not write to config file");
+            let mut write_file = File::create(&file_path)?;
+            for line in contents {
+                // Filter through lines
+                if !line.contains(command) {
+                    writeln!(write_file, "{}", line)?;
+                }
+            }
         }
     }
     return Ok(());
