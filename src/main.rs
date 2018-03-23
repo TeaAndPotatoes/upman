@@ -1,13 +1,14 @@
 extern crate clap;
 
-use clap::{App, Arg, SubCommand};
 use std::io::{BufRead, BufReader};
 use std::io::prelude::*;
 use std::fs::{File, OpenOptions, create_dir_all};
 use std::process::Command;
 
+mod app;
+
 fn main() {
-    let app = create_app();
+    let app = app::create_app();
     let matches = app.get_matches();
 
     let config_directory = format!("{}/.upman/", std::env::home_dir().unwrap().display());
@@ -40,35 +41,6 @@ fn main() {
     }
 }
 
-fn create_app() -> App<'static, 'static> {
-    return App::new("Update Manager")
-        .version("0.1.0-Beta")
-        .author("Brendan Doney <bre.doney@gmail.com>")
-        .about("Cross-platform, command-line update manager for easily checking and scheduling updates for different tools")
-        .subcommand(SubCommand::with_name("list")
-            .about("List all of the update commands added to this tool")
-        )
-        .subcommand(SubCommand::with_name("run")
-            .about("Run each of the commands stored through add")
-        )
-        .subcommand(SubCommand::with_name("remove")
-            .about("Remove a specific command from the configuration file")
-            .arg(Arg::with_name("command")
-                .required(true)
-                .takes_value(true)
-                .help("the command to remove from the config file")
-            )
-        )
-        .subcommand(SubCommand::with_name("add")
-            .about("Add a command to the list of tools to update")
-            .arg(Arg::with_name("input")
-                .required(true)
-                .takes_value(true)
-                .help("the command to add to the update checker")
-            )
-        );
-}
-
 fn list_tools(file: &File) {
     println!("Commands are not currently scheduled to check at any regular period\n");
     println!("Registered commands:");
@@ -91,10 +63,11 @@ fn run_updates(file: &File) {
             for part in collection {
                 command.arg(part); // Adding additional args from Vec, if any
             }
-            let output = command.output().expect("Failed to execute process");
-            println!("status: {}", output.status);
-            println!("stdout: {}", String::from_utf8_lossy(&output.stdout));
-            println!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+            // Execute the command using output(), and check for errors - notify if any are found
+            match command.output() {
+                Ok(output) => println!("stdout: {}", String::from_utf8_lossy(&output.stdout)),
+                Err(_) => println!("\n<WARNING> Could not execute command: {}\n", l)
+            };
         }
     }
 }
