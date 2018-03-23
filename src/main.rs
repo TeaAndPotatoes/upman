@@ -2,8 +2,7 @@ extern crate clap;
 
 use std::io::{BufRead, BufReader};
 use std::io::prelude::*;
-#[allow(unused_imports)]
-use std::fs::{File, OpenOptions, create_dir_all};
+use std::fs::{create_dir_all, File, OpenOptions};
 use std::process::Command;
 
 mod app;
@@ -19,21 +18,19 @@ fn main() {
     match matches.subcommand() {
         ("list", _) => list_tools(config_filepath),
         ("run", _) => run_updates(config_filepath),
-        ("add", Some(add_matches)) => add_command(config_filepath, add_matches.value_of("input").unwrap()),
-        // ("remove", Some(remove_matches)) => {
-        //     // Unwrap command, as it is required 
-        //     match remove_matches.value_of("command").unwrap() {
-        //         "*" | "all" | "." => config_file.set_len(0).expect("Unable to clear file"),
-        //         _ => println!("Other option")
-        //     };
-        // },
+        ("add", Some(add_matches)) => {
+            add_command(config_filepath, add_matches.value_of("input").unwrap())
+        }
+        ("remove", Some(remove_matches)) => {
+            remove_command(config_filepath, remove_matches.value_of("command").unwrap())
+                .expect("Unable to remove command from config file")
+        }
         ("", None) => println!("No subcommand was used"), // If no subcommand was used it'll match the tuple ("", None)
         _ => unreachable!(), // If all subcommands are defined above, anything else is unreachable!()
     }
 }
 
 fn list_tools(file_path: String) {
-    print!("{}", file_path);
     let file = OpenOptions::new()
         .read(true)
         .write(true)
@@ -71,7 +68,7 @@ fn run_updates(file_path: String) {
             // Execute the command using output(), and check for errors - notify if any are found
             match command.output() {
                 Ok(output) => println!("Output: {}", String::from_utf8_lossy(&output.stdout)),
-                Err(_) => println!("<WARNING> Could not execute command: {}\n", l)
+                Err(_) => println!("<WARNING> Could not execute command: {}\n", l),
             };
         }
     }
@@ -87,6 +84,42 @@ fn add_command(file_path: String, command: &str) {
     write!(file, "{}\n", command).expect("Could not write to config file");
 }
 
-// fn remove_command(command: &str, file: &File) {
-    
-// }
+fn remove_command(file_path: String, command: &str) -> Result<(), std::io::Error> {
+    match command {
+        "*" | "all" | "." => {
+            if confirm_selection() {
+                // Try creating file, which truncates file if found
+                File::create(&file_path)?;
+            }
+        }
+        val => {
+            // Try to open file at file_path, and create file if not found
+            let mut src_file = match File::open(&file_path) {
+                Ok(val) => val,
+                Err(_) => OpenOptions::new()
+                    .write(true)
+                    .read(true)
+                    .create(true)
+                    .open(&file_path)?,
+            };
+            let mut contents = String::new();
+
+            // Existence of file should be caught already, so try reading and removing command
+            src_file
+                .read_to_string(&mut contents)
+                .expect("Unable to read from file");
+            contents = str::replace(&contents, val, "");
+
+            drop(src_file); // Drop for re-opening in write mode
+            let mut write_file = File::create(&file_path)?;
+
+            // File is already opened in write mode, so throw error if unable to write
+            write!(write_file, "{}", contents).expect("Could not write to config file");
+        }
+    }
+    return Ok(());
+}
+
+fn confirm_selection() -> bool {
+    return true;
+}
