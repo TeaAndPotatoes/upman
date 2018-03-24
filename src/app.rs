@@ -21,7 +21,7 @@ pub fn create_app() -> App<'static, 'static> {
         )
         .subcommand(SubCommand::with_name("add")
             .about("Add a command to the list of tools to update")
-            .arg(Arg::with_name("input")
+            .arg(Arg::with_name("command")
                 .required(true)
                 .takes_value(true)
                 .help("the command to add to the update checker")

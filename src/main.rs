@@ -22,7 +22,7 @@ fn main() {
         ("list", _) => list_tools(config_filepath),
         ("run", _) => run_updates(config_filepath),
         ("add", Some(add_matches)) => {
-            add_command(config_filepath, add_matches.value_of("input").unwrap())
+            add_command(config_filepath, add_matches.value_of("command").unwrap())
         }
         ("remove", Some(remove_matches)) => {
             remove_command(config_filepath, remove_matches.value_of("command").unwrap())
@@ -41,14 +41,25 @@ fn list_tools(file_path: String) {
         .open(file_path)
         .expect("Unable to open or create file at current directory");
 
-    println!("Commands are not currently scheduled to check at any regular period\n");
-    println!("Registered commands:");
+    let mut printed_prompt = false;
     let buf_reader = BufReader::new(file);
     for line in buf_reader.lines() {
         let l = line.expect("Could not read line from file");
-        if !l.trim().is_empty() {
-            println!("\t{}", l);
+        if !l.trim().is_empty() && &l[..1] == "$" {
+            if !printed_prompt {
+                 // Print the title for this command, if this is the first command
+                println!("Registered commands:");
+                println!("  Use \"upman add <command>\" to add a command to the list of command");
+                println!("  Use \"upman remove <command>\" to remove a command from the list of commands\n");
+                printed_prompt = true;
+            }
+            println!("      {}", &l);
         }
+    }
+    if !printed_prompt {
+        println!("No commands are currently added to this tool\nAdd commands by using \"upman add <command>\"")
+    } else {
+        println!("\nUse \"upman run\" to run the listed commands");
     }
 }
 
@@ -62,16 +73,17 @@ fn run_updates(file_path: String) {
     let buf_reader = BufReader::new(file);
     for line in buf_reader.lines() {
         let l = line.expect("Could not read line from file");
-        if !l.trim().is_empty() {
-            // println!("Running `{}`", l);
+        if !l.trim().is_empty() && &l[..1] == "$" {
             let pb = ProgressBar::new_spinner();
             pb.enable_steady_tick(200);
             pb.set_style(ProgressStyle::default_spinner()
                 .tick_chars("/|\\- ")
                 .template(&format!("{command_str} {{spinner}}", command_str=l)));
             let mut collection: Vec<&str> = l.split(" ").collect();
+            collection.remove(0);
 
-            let mut command = process::Command::new(collection.remove(0)); // First part is always assured when splitting
+            // Take substring to cut off the command prompt from within the conf file
+            let mut command = process::Command::new(&collection.remove(0));
             for part in collection {
                 command.arg(part); // Adding additional args from Vec, if any
             }
@@ -113,7 +125,8 @@ fn add_command(file_path: String, command: &str) {
         .open(file_path)
         .expect("Unable to open or create file at current directory");
 
-    write!(file, "{}\n", command).expect("Could not write to config file");
+    // The prompt for a command is a '$' mark at the beginning of the line
+    write!(file, "$ {}\n", command).expect("Could not write to config file");
 }
 
 fn remove_command(file_path: String, command: &str) -> Result<(), std::io::Error> {
