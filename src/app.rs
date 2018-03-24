@@ -29,6 +29,7 @@ pub fn create_app() -> App<'static, 'static> {
             .arg(Arg::with_name("command")
                 .required(true)
                 .takes_value(true)
+                .multiple(true)
                 .help("The command to add to the update checker")
             )
         );

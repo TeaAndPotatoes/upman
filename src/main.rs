@@ -19,27 +19,31 @@ fn main() {
     let config_filepath = format!("{}upman.conf", config_directory);
 
     match matches.subcommand() {
-        ("list", _) => list_tools(config_filepath),
+        ("list", _) => list_tools(&config_filepath),
         ("run", run_matches) => {
             let show_output = match run_matches {
                 Some(set) => set.is_present("show output"),
                 None => false,
             };
-            run_updates(config_filepath, show_output);
+            run_updates(&config_filepath, show_output);
         }
         ("add", Some(add_matches)) => {
-            add_command(config_filepath, add_matches.value_of("command").unwrap())
+            // let m: Vec<_> = .collect();
+            // println!("{:?}", m);
+            for m in add_matches.values_of("command").unwrap() {
+                add_command(&config_filepath, m);
+            }
         }
-        ("remove", Some(remove_matches)) => {
-            remove_command(config_filepath, remove_matches.value_of("command").unwrap())
-                .expect("Unable to remove command from config file")
-        }
+        ("remove", Some(remove_matches)) => remove_command(
+            &config_filepath,
+            remove_matches.value_of("command").unwrap(),
+        ).expect("Unable to remove command from config file"),
         ("", None) => println!("No subcommand was used"), // If no subcommand was used it'll match the tuple ("", None)
         _ => unreachable!(), // If all subcommands are defined above, anything else is unreachable!()
     }
 }
 
-fn list_tools(file_path: String) {
+fn list_tools(file_path: &String) {
     let file = OpenOptions::new()
         .read(true)
         .write(true)
@@ -69,7 +73,7 @@ fn list_tools(file_path: String) {
     }
 }
 
-fn run_updates(file_path: String, show_output: bool) {
+fn run_updates(file_path: &String, show_output: bool) {
     let file = OpenOptions::new()
         .read(true)
         .write(true)
@@ -100,7 +104,7 @@ fn run_updates(file_path: String, show_output: bool) {
             let mut spawned_command;
             if !show_output {
                 pb.enable_steady_tick(200);
-                spawned_command = command.stdout(process::Stdio::piped()).spawn().unwrap();
+                spawned_command = command.stdout(process::Stdio::null()).spawn().unwrap();
             } else {
                 pb.finish(); // Finishing spinner prints out the formatted message
                 spawned_command = command.stdout(process::Stdio::inherit()).spawn().unwrap();
@@ -141,7 +145,7 @@ fn run_updates(file_path: String, show_output: bool) {
     }
 }
 
-fn add_command(file_path: String, command: &str) {
+fn add_command(file_path: &String, command: &str) {
     let mut file = OpenOptions::new()
         .append(true)
         .create(true)
@@ -152,7 +156,7 @@ fn add_command(file_path: String, command: &str) {
     write!(file, "$ {}\n", command).expect("Could not write to config file");
 }
 
-fn remove_command(file_path: String, command: &str) -> Result<(), std::io::Error> {
+fn remove_command(file_path: &String, command: &str) -> Result<(), std::io::Error> {
     match command {
         "all" | "." => {
             if confirm_selection("Are you sure you would like to clear the config file?") {
