@@ -1,4 +1,5 @@
 extern crate clap;
+extern crate dialoguer;
 
 use std::io::{BufRead, BufReader};
 use std::io::prelude::*;
@@ -87,9 +88,11 @@ fn add_command(file_path: String, command: &str) {
 fn remove_command(file_path: String, command: &str) -> Result<(), std::io::Error> {
     match command {
         "all" | "." => {
-            if confirm_selection() {
+            if confirm_selection("Are you sure you would like to clear the config file?") {
                 // Try creating file, which truncates file if found
                 File::create(&file_path)?;
+            } else {
+                println!("Cancelling...");
             }
         }
         _ => {
@@ -118,9 +121,12 @@ fn remove_command(file_path: String, command: &str) -> Result<(), std::io::Error
             }
         }
     }
-    return Ok(());
+
+    Ok(())
 }
 
-fn confirm_selection() -> bool {
-    return true;
+fn confirm_selection(message: &str) -> bool {
+    let mut confirm = dialoguer::Confirmation::new(message);
+    confirm.default(false);
+    confirm.interact().unwrap()
 }
