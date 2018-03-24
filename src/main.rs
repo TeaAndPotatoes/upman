@@ -1,10 +1,12 @@
 extern crate clap;
 extern crate dialoguer;
+extern crate indicatif;
 
 use std::io::{BufRead, BufReader};
-use std::io::prelude::*;
 use std::fs::{create_dir_all, File, OpenOptions};
-use std::process::Command;
+use std::io::prelude::*;
+use std::process;
+use indicatif::{ProgressBar, ProgressStyle};
 
 mod app;
 
@@ -44,7 +46,7 @@ fn list_tools(file_path: String) {
     let buf_reader = BufReader::new(file);
     for line in buf_reader.lines() {
         let l = line.expect("Could not read line from file");
-        if !l.is_empty() {
+        if !l.trim().is_empty() {
             println!("\t{}", l);
         }
     }
@@ -60,17 +62,46 @@ fn run_updates(file_path: String) {
     let buf_reader = BufReader::new(file);
     for line in buf_reader.lines() {
         let l = line.expect("Could not read line from file");
-        if !l.is_empty() {
+        if !l.trim().is_empty() {
+            // println!("Running `{}`", l);
+            let pb = ProgressBar::new_spinner();
+            pb.enable_steady_tick(200);
+            pb.set_style(ProgressStyle::default_spinner()
+                .tick_chars("/|\\- ")
+                .template(&format!("{command_str} {{spinner}}", command_str=l)));
             let mut collection: Vec<&str> = l.split(" ").collect();
-            let mut command = Command::new(collection.remove(0)); // First part is always assured when splitting
+
+            let mut command = process::Command::new(collection.remove(0)); // First part is always assured when splitting
             for part in collection {
                 command.arg(part); // Adding additional args from Vec, if any
             }
-            // Execute the command using output(), and check for errors - notify if any are found
-            match command.output() {
-                Ok(output) => println!("Output: {}", String::from_utf8_lossy(&output.stdout)),
-                Err(_) => println!("<WARNING> Could not execute command: {}\n", l),
-            };
+            let mut spawned_command = command.stdout(process::Stdio::piped()).spawn().unwrap();
+
+            loop { // Loop until the command has finished executing
+                match spawned_command.try_wait() {
+                    Ok(Some(_)) => {
+                        pb.finish(); // Stop progress spinner, now that command is done
+                        // Command's existence has been confirmed
+                        
+                        match spawned_command.stdout.as_mut() {
+                            Some(val) => {
+                                let mut output = String::new();
+                                val.read_to_string(&mut output)
+                                    .expect("Unable to read result of command");
+                                if !output.trim().is_empty() {
+                                    println!("Output: {}", output);    
+                                } else {
+                                    println!("No output\n");
+                                }
+                            }
+                            None => println!(),
+                        }
+                        break; // Either way, the command did finish, so break here
+                    }
+                    Ok(None) => pb.tick(),
+                    Err(_) => println!("<WARNING> Could not execute command: {}\n", l),
+                }
+            }
         }
     }
 }
