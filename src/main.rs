@@ -22,11 +22,11 @@ fn main() {
         ("list", _) => list_tools(config_filepath),
         ("run", run_matches) => {
             let show_output = match run_matches {
-                Some(set) => set.is_present("show"),
-                None => false
+                Some(set) => set.is_present("show output"),
+                None => false,
             };
             run_updates(config_filepath, show_output);
-        },
+        }
         ("add", Some(add_matches)) => {
             add_command(config_filepath, add_matches.value_of("command").unwrap())
         }
@@ -81,37 +81,46 @@ fn run_updates(file_path: String, show_output: bool) {
         let l = line.expect("Could not read line from file");
         if !l.trim().is_empty() && &l[..1] == "$" {
             let pb = ProgressBar::new_spinner();
-            pb.enable_steady_tick(200);
             pb.set_style(
                 ProgressStyle::default_spinner()
                     .tick_chars("/|\\- ")
                     .template(&format!("{command_str} {{spinner}}", command_str = l)),
             );
+
             let mut collection: Vec<&str> = l.split(" ").collect();
+            // Remove the '$ ' prefix that signifies a command in a file
             collection.remove(0);
 
-            // Take substring to cut off the command prompt from within the conf file
             let mut command = process::Command::new(&collection.remove(0));
             for part in collection {
                 // Adding additional args from Vec, if any
                 command.arg(part);
             }
-            let mut spawned_command = command.stdout(process::Stdio::piped()).spawn().unwrap();
+
+            let mut spawned_command;
+            if !show_output {
+                pb.enable_steady_tick(200);
+                spawned_command = command.stdout(process::Stdio::piped()).spawn().unwrap();
+            } else {
+                pb.finish(); // Finishing spinner prints out the formatted message
+                spawned_command = command.stdout(process::Stdio::inherit()).spawn().unwrap();
+            }
 
             loop {
                 // Loop until the command has finished executing
                 match spawned_command.try_wait() {
                     Ok(Some(_)) => {
-                        pb.finish(); // Stop progress spinner, now that command is done
+                        if !show_output {
+                            pb.finish();
+                        }
+
                         match spawned_command.stdout.as_mut() {
                             Some(val) => {
                                 let mut output = String::new();
                                 val.read_to_string(&mut output)
                                     .expect("Unable to read result of command");
-                                if show_output {
+                                if show_output && output.trim().is_empty() {
                                     if !output.trim().is_empty() {
-                                        println!("Output: {}", output);
-                                    } else {
                                         println!("No output\n");
                                     }
                                 }
@@ -120,7 +129,11 @@ fn run_updates(file_path: String, show_output: bool) {
                         }
                         break; // Either way, the command did finish, so break here
                     }
-                    Ok(None) => pb.tick(),
+                    Ok(None) => {
+                        if !show_output {
+                            pb.tick();
+                        }
+                    }
                     Err(_) => println!("<WARNING> Could not execute command: {}\n", l),
                 }
             }
