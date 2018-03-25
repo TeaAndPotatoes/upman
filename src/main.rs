@@ -38,7 +38,9 @@ fn main() {
             &config_filepath,
             remove_matches.value_of("command").unwrap(),
         ).expect("Unable to remove command from config file"),
-        ("", None) => println!("No subcommand was used"), // If no subcommand was used it'll match the tuple ("", None)
+        ("", None) => println!(
+            "No subcommand used - for information about how to use upman, try \"upman --help\""
+        ), // If no subcommand was used it'll match the tuple ("", None)
         _ => unreachable!(), // If all subcommands are defined above, anything else is unreachable!()
     }
 }
