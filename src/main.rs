@@ -22,8 +22,8 @@ fn main() {
         ("list", _) => list_tools(&config_filepath),
         ("run", run_matches) => {
             let show_output = match run_matches {
-                Some(set) => set.is_present("show output"),
-                None => false,
+                Some(set) => !set.is_present("silent"),
+                None => true,
             };
             run_updates(&config_filepath, show_output);
         }
