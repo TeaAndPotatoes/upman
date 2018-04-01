@@ -20,13 +20,6 @@ fn main() {
 
     match matches.subcommand() {
         ("list", _) => list_tools(&config_filepath),
-        ("run", run_matches) => {
-            let show_output = match run_matches {
-                Some(set) => !set.is_present("silent"),
-                None => true,
-            };
-            run_updates(&config_filepath, show_output);
-        }
         ("add", Some(add_matches)) => {
             // let m: Vec<_> = .collect();
             // println!("{:?}", m);
@@ -38,9 +31,13 @@ fn main() {
             &config_filepath,
             remove_matches.value_of("command").unwrap(),
         ).expect("Unable to remove command from config file"),
-        ("", None) => println!(
-            "No subcommand used - for information about how to use upman, try \"upman --help\""
-        ), // If no subcommand was used it'll match the tuple ("", None)
+        ("run", run_matches) | ("", run_matches) => {
+            let show_output = match run_matches {
+                Some(set) => !set.is_present("silent"),
+                None => true,
+            };
+            run_updates(&config_filepath, show_output);
+        }, // If no subcommand was used it'll match the tuple ("", None)
         _ => unreachable!(), // If all subcommands are defined above, anything else is unreachable!()
     }
 }
