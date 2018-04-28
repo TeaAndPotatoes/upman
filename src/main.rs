@@ -43,29 +43,18 @@ fn main() {
         }
         ("remove", Some(remove_matches)) => {
             let arg_value = remove_matches.value_of("command").unwrap();
-            // match arg_value.parse::<usize>() {
-            //     Ok(line_number) => remove_command_line(&config_filepath, line_number).expect("Could not remove line"),
-            //     Err(val) => match val {
-            //         "all" | "." => clear_commands(&config_filepath),
-            //         val => remove_command_name(&config_filepath, val).expect("Could not remove command")
-            //     }
-            // }
-            if let Ok(line_number) = arg_value.parse::<usize>() {
-                remove_command_line(&config_filepath, line_number).expect(&format!("Could not remove line {} from config file", line_number));
+            if remove_matches.is_present("number") {
+                if let Ok(line_number) = arg_value.parse::<usize>() {
+                    remove_command_line(&config_filepath, line_number).expect(&format!("Could not remove line {} from config file", line_number));
+                } else {
+                    unimplemented!()
+                }
             } else {
                 match arg_value {
                     "all" | "." => clear_commands(&config_filepath),
                     val => remove_command_name(&config_filepath, val).expect(&format!("Unable to remove {} from config file", val))
                 }
             }
-            // if let Ok(line_number) = arg_value.parse::<i32>() {
-            //     match line_number
-            // } else {
-            //     remove_command(
-            //         &config_filepath,
-            //         remove_matches.value_of("command").unwrap(),
-            //     ).expect("Unable to remove command from config file"),
-            // }
         }
         ("run", run_matches) | ("", run_matches) => {
             let show_output = match run_matches {
