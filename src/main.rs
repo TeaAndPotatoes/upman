@@ -1,14 +1,28 @@
 extern crate clap;
 extern crate dialoguer;
 extern crate indicatif;
+extern crate console;
 
 use std::io::{BufRead, BufReader};
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::prelude::*;
 use std::process;
 use indicatif::{ProgressBar, ProgressStyle};
+use console::style;
 
 mod app;
+
+enum StyledMessages {
+    Error,
+}
+
+impl StyledMessages {
+    fn value(&self) -> console::StyledObject<&str> {
+        match *self {
+            StyledMessages::Error => style("error:").red().bold(),
+        }
+    }
+}
 
 fn main() {
     let app = app::create_app();
@@ -27,10 +41,32 @@ fn main() {
                 add_command(&config_filepath, m);
             }
         }
-        ("remove", Some(remove_matches)) => remove_command(
-            &config_filepath,
-            remove_matches.value_of("command").unwrap(),
-        ).expect("Unable to remove command from config file"),
+        ("remove", Some(remove_matches)) => {
+            let arg_value = remove_matches.value_of("command").unwrap();
+            // match arg_value.parse::<usize>() {
+            //     Ok(line_number) => remove_command_line(&config_filepath, line_number).expect("Could not remove line"),
+            //     Err(val) => match val {
+            //         "all" | "." => clear_commands(&config_filepath),
+            //         val => remove_command_name(&config_filepath, val).expect("Could not remove command")
+            //     }
+            // }
+            if let Ok(line_number) = arg_value.parse::<usize>() {
+                remove_command_line(&config_filepath, line_number).expect(&format!("Could not remove line {} from config file", line_number));
+            } else {
+                match arg_value {
+                    "all" | "." => clear_commands(&config_filepath),
+                    val => remove_command_name(&config_filepath, val).expect(&format!("Unable to remove {} from config file", val))
+                }
+            }
+            // if let Ok(line_number) = arg_value.parse::<i32>() {
+            //     match line_number
+            // } else {
+            //     remove_command(
+            //         &config_filepath,
+            //         remove_matches.value_of("command").unwrap(),
+            //     ).expect("Unable to remove command from config file"),
+            // }
+        }
         ("run", run_matches) | ("", run_matches) => {
             let show_output = match run_matches {
                 Some(set) => !set.is_present("silent"),
@@ -137,7 +173,7 @@ fn run_updates(file_path: &String, show_output: bool) {
                             pb.tick();
                         }
                     }
-                    Err(_) => println!("<WARNING> Could not execute command: {}\n", l),
+                    Err(_) => println!("{} Could not execute command: '{}'\n", StyledMessages::Error.value(), style(&l)),
                 }
             }
         }
@@ -155,48 +191,85 @@ fn add_command(file_path: &String, command: &str) {
     write!(file, "$ {}\n", command).expect("Could not write to config file");
 }
 
-fn remove_command(file_path: &String, command: &str) -> Result<(), std::io::Error> {
-    match command {
-        "all" | "." => {
-            if confirm_selection("Are you sure you would like to clear the config file?") {
-                // Try creating file, which truncates file if found
-                File::create(&file_path)?;
-            } else {
-                println!("Cancelling...");
-            }
-        }
-        _ => {
-            // Try to open file at file_path, and create file if not found
-            let src_file = match File::open(&file_path) {
-                Ok(file) => file,
-                Err(_) => OpenOptions::new()
-                    .write(true)
-                    .read(true)
-                    .create(true)
-                    .open(&file_path)?,
-            };
-            // Existence of file has been verified already, so try reading and removing command
-            let contents: Vec<String> = BufReader::new(&src_file)
-                .lines()
-                .map(|line| line.unwrap())
-                .collect();
-            drop(src_file); // Drop for re-opening in write mode
+fn remove_command_line(file_path: &String, line_number: usize) -> Result<(), std::io::Error> {
+    // Try to open file at file_path, and create file if not found
+    let src_file = match File::open(&file_path) {
+        Ok(file) => file,
+        Err(_) => OpenOptions::new()
+            .write(true)
+            .read(true)
+            .create(true)
+            .open(&file_path)?,
+    };
+    // Existence of file has been verified already, so try reading and removing command
+    let mut contents: Vec<String> = BufReader::new(&src_file)
+        .lines()
+        .map(|line| line.unwrap())
+        .collect();
+    drop(src_file); // Drop for re-opening in write mode
 
-            let mut write_file = File::create(&file_path)?;
-            for line in contents {
-                // Filter through lines
-                if !line.contains(command) {
-                    writeln!(write_file, "{}", line)?;
-                }
+    // Vec<T> panics if remove is out of bounds, so check validity of line_number
+    let length = contents.len();
+    if 1 <= line_number && line_number <= length {
+        contents.remove(line_number - 1);
+    } else {
+        if length == 0 {
+            println!("        There are currently no command in the config file.");
+            println!("        Use 'upman add <command>' to add a command");
+        } else {
+            println!("{} Command number '{}' is out of bounds of config file", StyledMessages::Error.value(), style(line_number).yellow());
+            if line_number - length > 1 {
+                println!("        There are currently only {} command in the config file", style(length).green());
+            } else {
+                println!("        Command numbers start at '{}'", style("1").green());
             }
         }
     }
+    // Write the contents of `contents` regardless of success of remove
+    write_contents(File::create(&file_path)?, contents.iter());
 
     Ok(())
 }
 
-fn confirm_selection(message: &str) -> bool {
-    let mut confirm = dialoguer::Confirmation::new(message);
+fn remove_command_name(file_path: &String, command: &str) -> Result<(), std::io::Error> {
+    // Try to open file at file_path, and create file if not found
+    let src_file = match File::open(&file_path) {
+        Ok(file) => file,
+        Err(_) => OpenOptions::new()
+            .write(true)
+            .read(true)
+            .create(true)
+            .open(&file_path)?,
+    };
+
+    // Existence of file has been verified already, so try reading and removing command
+    if let Some(i) = BufReader::new(&src_file).lines().position(|line| line.unwrap() == format!("$ {}", command)) {
+        println!("{}", i);
+        drop(src_file); // Drop for re-opening in write mode
+        println!("{}", i);
+        remove_command_line(file_path, i + 1)?; // Add 1 to i, because line numbers are used instead of indexes
+    } // If not in Some(i), the command does not exist, so ignore and return Ok(()) as well
+
+    Ok(())
+}
+
+fn write_contents<'a, I>(mut file: File, vals: I) where I: IntoIterator<Item = &'a String> {
+    // Create and write to file using iterator
+    for val in vals {
+        writeln!(file, "{}", val).unwrap();
+    }
+}
+
+fn clear_commands(file_path: &String) {
+    // Create confirmation with dialoguer
+    let mut confirm = dialoguer::Confirmation::new("Are you sure you would like to clear the config file?");
     confirm.default(false);
-    confirm.interact().unwrap()
+
+    if confirm.interact().unwrap() {
+        // Try creating file, which truncates file if found
+        File::create(&file_path).expect("Unable to clear the config file"); 
+        // TODO: migrate to a match, with backup method for clearing
+    } else {
+        println!("Cancelling...");
+    }
 }
