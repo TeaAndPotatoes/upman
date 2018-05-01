@@ -10,6 +10,7 @@ use std::process;
 use indicatif::{ProgressBar, ProgressStyle};
 use console::style;
 
+mod command;
 mod app;
 
 enum StyledMessages {
