@@ -7,9 +7,10 @@ struct Command {
 }
 
 impl Command {
+    #[allow(dead_code)]
     const PREFIX: &'static str = "$ ";
 
-    fn parse_commands(command_str: &str) -> Vec<&str> {
+    pub fn parse_commands(command_str: &str) -> Vec<&str> {
         // Command without prefix
         let results: Vec<&str> = command_str
             .subset_left(Command::PREFIX)
@@ -19,6 +20,16 @@ impl Command {
             return Vec::new();
         } else {
             return results;
+        }
+    }
+
+    pub fn parse_first_command(command_str: &str) -> &str {
+        let commands = Command::parse_commands(command_str);
+        // let commands = parse_commands(command_str);
+        if commands.len() < 1 {
+            return "";
+        } else {
+            return commands[0];
         }
     }
 
