@@ -10,7 +10,7 @@ impl Command {
     #[allow(dead_code)]
     const PREFIX: &'static str = "$ ";
 
-    pub fn parse_commands(command_str: &str) -> Vec<&str> {
+    pub fn prefix_matches(command_str: &str) -> Vec<&str> {
         // Command without prefix
         let results: Vec<&str> = command_str
             .subset_left(Command::PREFIX)
@@ -23,9 +23,8 @@ impl Command {
         }
     }
 
-    pub fn parse_first_command(command_str: &str) -> &str {
-        let commands = Command::parse_commands(command_str);
-        // let commands = parse_commands(command_str);
+    pub fn first_prefix_match(command_str: &str) -> &str {
+        let commands = Command::prefix_matches(command_str);
         if commands.len() < 1 {
             return "";
         } else {
@@ -34,30 +33,24 @@ impl Command {
     }
 
     pub fn from(command: &str) -> Option<Command> {
-        let full_command: String;
-        let parsed = Command::parse_commands(command);
-        if parsed.len() > 0 {
-            full_command = String::from(parsed[0]);
-        } else {
+        println!("{}", command);
+        let single_command = Command::first_prefix_match(command);
+        println!("{}", single_command);
+
+        if single_command.is_empty() {
             return None;
         }
-
-        let mut command_parts: Vec<&str> = full_command.split(" ").collect();
-        let mut runnable_command = std::process::Command::new(&command_parts.remove(0));
-
-        for part in command_parts {
-            // Adding additional args from Vec, if any
-            runnable_command.arg(part);
-        }
+        
+        let runnable_command = std::process::Command::from_str(single_command);
 
         Some(Command {
-            full_command: full_command.to_owned(),
+            full_command: String::from(single_command),
             runnable_command,
         })
     }
 }
 
-pub trait Subset {
+trait Subset {
     fn subset_left(&self, pattern: &str) -> &str;
     fn subset_right(&self, pattern: &str) -> &str;
     fn subset(&self, pattern: &str) -> &str;
@@ -82,5 +75,31 @@ impl Subset for str {
 
     fn subset(&self, pattern: &str) -> &str {
         return self.subset_left(pattern).subset_right(pattern);
+    }
+}
+
+pub trait FromStr<T> {
+    fn from_str(string: &str) -> T;
+}
+
+impl FromStr<std::process::Command> for std::process::Command {
+    fn from_str(string: &str) -> std::process::Command {
+        let mut str_iter = string.split(" ");
+
+        let mut command: std::process::Command;
+
+        if let Some(base_command) = str_iter.next() {
+           command = std::process::Command::new(base_command);
+        } else {
+            panic!("The command passed did not contain a valid command");
+        }
+
+        for opt_arg in str_iter {
+            if !opt_arg.trim().is_empty() {
+                command.arg(opt_arg);
+            }
+        }
+
+        return command;
     }
 }
