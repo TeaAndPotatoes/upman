@@ -78,8 +78,9 @@ fn list_tools(file_path: &String) {
 
     let mut printed_prompt = false;
     let buf_reader = BufReader::new(file);
+
     for line in buf_reader.lines() {
-        let l = line.expect("Could not read line from file");
+        let l = line.unwrap_or(String::new());
         if !l.trim().is_empty() && &l[..1] == "$" {
             if !printed_prompt {
                 // Print the title for this command, if this is the first command
@@ -91,6 +92,7 @@ fn list_tools(file_path: &String) {
             println!("      {}", &l);
         }
     }
+    
     if !printed_prompt {
         println!("No commands are currently added to this tool\nAdd commands by using \"upman add <command>\"")
     } else {
@@ -238,7 +240,9 @@ fn remove_command_name(file_path: &String, command: &str) -> Result<(), std::io:
         drop(src_file); // Drop for re-opening in write mode
         println!("{}", i);
         remove_command_line(file_path, i + 1)?; // Add 1 to i, because line numbers are used instead of indexes
-    } // If not in Some(i), the command does not exist, so ignore and return Ok(()) as well
+    } else { // If not in Some(i), the command does not exist, so ignore and return Ok(()) as well
+        println!("{} The command \"{}\" was not found", StyledMessages::Error.value(), command);
+    }
 
     Ok(())
 }
