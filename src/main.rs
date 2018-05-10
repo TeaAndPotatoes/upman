@@ -2,6 +2,7 @@ extern crate clap;
 extern crate dialoguer;
 extern crate indicatif;
 extern crate console;
+extern crate open;
 
 use std::io::{BufRead, BufReader};
 use std::fs::{create_dir_all, File, OpenOptions};
@@ -64,6 +65,7 @@ fn main() {
             };
             run_updates(&config_filepath, show_output);
         }, // If no subcommand was used it'll match the tuple ("", None)
+        ("open-config", _) => open_file(config_filepath),
         _ => unreachable!(), // If all subcommands are defined above, anything else is unreachable!()
     }
 }
@@ -265,5 +267,11 @@ fn clear_commands(file_path: &String) {
         // TODO: migrate to a match, with backup method for clearing
     } else {
         println!("Cancelling...");
+    }
+}
+
+fn open_file(file_path: String) {
+    if open::that(&file_path).is_err() {
+        println!("{} The file config file at {} could not be opened, as it does not exist or has read-only restrictions", StyledMessages::Error.value(), file_path);
     }
 }

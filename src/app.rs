@@ -37,5 +37,8 @@ pub fn create_app() -> App<'static, 'static> {
                 .multiple(true)
                 .help("The command to add to the update checker")
             )
+        )
+        .subcommand(SubCommand::with_name("open-config")
+            .about("Open the upman configuration file with the system's default text editor")
         );
 }
