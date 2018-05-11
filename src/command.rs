@@ -40,7 +40,7 @@ impl Command {
         if single_command.is_empty() {
             return None;
         }
-        
+
         let runnable_command = std::process::Command::from_str(single_command);
 
         Some(Command {
@@ -49,13 +49,16 @@ impl Command {
         })
     }
 
-    pub fn run_command(&mut self, show_output: bool) -> Result<std::process::Child, std::io::Error> {
+    pub fn run_command(
+        &mut self,
+        show_output: bool,
+    ) -> Result<std::process::Child, std::io::Error> {
         if show_output {
             self.runnable_command.stdout(std::process::Stdio::inherit());
         } else {
             self.runnable_command.stdout(std::process::Stdio::null());
         }
-        
+
         self.runnable_command.spawn()
     }
 }
@@ -99,7 +102,7 @@ impl FromStr<std::process::Command> for std::process::Command {
         let mut command: std::process::Command;
 
         if let Some(base_command) = str_iter.next() {
-           command = std::process::Command::new(base_command);
+            command = std::process::Command::new(base_command);
         } else {
             panic!("The command passed did not contain a valid command");
         }

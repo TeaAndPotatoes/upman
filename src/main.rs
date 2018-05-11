@@ -1,29 +1,17 @@
 extern crate clap;
 extern crate dialoguer;
 extern crate indicatif;
-extern crate console;
 extern crate open;
 
-use std::io::{BufRead, BufReader};
+use indicatif::{ProgressBar, ProgressStyle};
+use messages::{console, PrintError};
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::prelude::*;
-use indicatif::{ProgressBar, ProgressStyle};
-use console::style;
+use std::io::{BufRead, BufReader};
 
-mod command;
 mod app;
-
-enum StyledMessages {
-    Error,
-}
-
-impl StyledMessages {
-    fn value(&self) -> console::StyledObject<&str> {
-        match *self {
-            StyledMessages::Error => style("error:").red().bold(),
-        }
-    }
-}
+mod command;
+mod messages;
 
 fn main() {
     let app = app::create_app();
@@ -36,8 +24,6 @@ fn main() {
     match matches.subcommand() {
         ("list", _) => list_tools(&config_filepath),
         ("add", Some(add_matches)) => {
-            // let m: Vec<_> = .collect();
-            // println!("{:?}", m);
             for m in add_matches.values_of("command").unwrap() {
                 add_command(&config_filepath, m);
             }
@@ -46,24 +32,30 @@ fn main() {
             let arg_value = remove_matches.value_of("command").unwrap();
             if remove_matches.is_present("number") {
                 if let Ok(line_number) = arg_value.parse::<usize>() {
-                    remove_command_line(&config_filepath, line_number).expect(&format!("Could not remove line {} from config file", line_number));
+                    if remove_command_line(&config_filepath, line_number).is_err() {
+                        format!("Could not remove line {} from config file", line_number)
+                            .print_error();
+                    }
                 } else {
                     unimplemented!()
                 }
             } else {
                 match arg_value {
                     "all" | "." => clear_commands(&config_filepath),
-                    val => remove_command_name(&config_filepath, val).expect(&format!("Unable to remove {} from config file", val))
+                    val => if remove_command_name(&config_filepath, val).is_err() {
+                        format!("Unable to remove {} from config file", val).print_error();
+                    },
                 }
             }
         }
-        ("run", run_matches) | ("", run_matches) => { // If no subcommand was used it'll match the tuple ("", None)
+        ("run", run_matches) | ("", run_matches) => {
+            // If no subcommand was used it'll match the tuple ("", None)
             let show_output = match run_matches {
                 Some(set) => !set.is_present("silent"),
                 None => true,
             };
             run_updates(&config_filepath, show_output);
-        },
+        }
         ("open-config", _) => open_file(config_filepath),
         _ => unreachable!(), // If all subcommands are defined above, anything else is unreachable!()
     }
@@ -93,7 +85,7 @@ fn list_tools(file_path: &String) {
             println!("      {}", &l);
         }
     }
-    
+
     if !printed_prompt {
         println!("No commands are currently added to this tool\nAdd commands by using \"upman add <command>\"")
     } else {
@@ -129,15 +121,17 @@ fn run_updates(file_path: &String, show_output: bool) {
                 Some(mut val) => match val.run_command(show_output) {
                     Ok(result) => result,
                     Err(_) => {
-                        println!("{} The current command could not be run.", StyledMessages::Error.value());
-                        println!("        Is the command itself correct?\n");
+                        vec![
+                            "The current command could not be run.",
+                            "Is the command itself correct?\n",
+                        ].print_error();
                         continue;
-                    },
-                }
-                None => {
-                    println!("{} Could not create command from {}\n", StyledMessages::Error.value(), l);
-                    continue;
+                    }
                 },
+                None => {
+                    format!("Could not create command from {}\n", l).print_error();
+                    continue;
+                }
             };
 
             loop {
@@ -168,7 +162,10 @@ fn run_updates(file_path: &String, show_output: bool) {
                             pb.tick();
                         }
                     }
-                    Err(_) => println!("{} Could not execute command: '{}'\n", StyledMessages::Error.value(), style(&l)),
+                    Err(_) => format!(
+                        "Could not execute command: '{}'\n",
+                        console::style(&l).yellow()
+                    ).print_error(),
                 }
             }
         }
@@ -212,12 +209,24 @@ fn remove_command_line(file_path: &String, line_number: usize) -> Result<(), std
             println!("        There are currently no command in the config file.");
             println!("        Use 'upman add <command>' to add a command");
         } else {
-            println!("{} Command number '{}' is out of bounds of config file", StyledMessages::Error.value(), style(line_number).yellow());
+            let mut error = vec![
+                format!(
+                    "Command number '{}' is out of bounds of config file",
+                    console::style(line_number).yellow()
+                ),
+            ];
             if line_number - length > 1 {
-                println!("        There are currently only {} command in the config file", style(length).green());
+                error.push(format!(
+                    "There are currently only {} command in the config file",
+                    console::style(length).green()
+                ));
             } else {
-                println!("        Command numbers start at '{}'", style("1").green());
+                error.push(format!(
+                    "Command numbers start at '{}'",
+                    console::style("1").green()
+                ));
             }
+            error.print_error();
         }
     }
     // Write the contents of `contents` regardless of success of remove
@@ -238,17 +247,27 @@ fn remove_command_name(file_path: &String, command: &str) -> Result<(), std::io:
     };
 
     // Existence of file has been verified already, so try reading and removing command
-    if let Some(i) = BufReader::new(&src_file).lines().position(|line| line.unwrap() == format!("$ {}", command)) {
+    if let Some(i) = BufReader::new(&src_file)
+        .lines()
+        .position(|line| line.unwrap() == format!("$ {}", command))
+    {
         drop(src_file); // Drop for re-opening in write mode
         remove_command_line(file_path, i + 1)?; // Add 1 to i, because line numbers are used instead of indexes
-    } else { // If not in Some(i), the command does not exist, so ignore and return Ok(()) as well
-        println!("{} The command \"{}\" was not found", StyledMessages::Error.value(), command);
+    } else {
+        // If not in Some(i), the command does not exist, so ignore and return Ok(()) as well
+        format!(
+            "The command '{}' was not found",
+            console::style(command).yellow()
+        ).print_error();
     }
 
     Ok(())
 }
 
-fn write_contents<'a, I>(mut file: File, vals: I) where I: IntoIterator<Item = &'a String> {
+fn write_contents<'a, I>(mut file: File, vals: I)
+where
+    I: IntoIterator<Item = &'a String>,
+{
     // Create and write to file using iterator
     for val in vals {
         writeln!(file, "{}", val).unwrap();
@@ -257,13 +276,14 @@ fn write_contents<'a, I>(mut file: File, vals: I) where I: IntoIterator<Item = &
 
 fn clear_commands(file_path: &String) {
     // Create confirmation with dialoguer
-    let mut confirm = dialoguer::Confirmation::new("Are you sure you would like to clear the config file?");
+    let mut confirm =
+        dialoguer::Confirmation::new("Are you sure you would like to clear the config file?");
     confirm.default(false);
 
     if confirm.interact().unwrap() {
         // Try creating file, which truncates file if found
-        File::create(&file_path).expect("Unable to clear the config file"); 
-        // TODO: migrate to a match, with backup method for clearing
+        File::create(&file_path).expect("Unable to clear the config file");
+    // TODO: migrate to a match, with backup method for clearing
     } else {
         println!("Cancelling...");
     }
@@ -271,6 +291,6 @@ fn clear_commands(file_path: &String) {
 
 fn open_file(file_path: String) {
     if open::that(&file_path).is_err() {
-        println!("{} The file config file at {} could not be opened, as it does not exist or has read-only restrictions", StyledMessages::Error.value(), file_path);
+        format!("The file config file at '{}' could not be opened, as it does not exist or has read-only restrictions", console::style(file_path).yellow()).print_error();
     }
 }
