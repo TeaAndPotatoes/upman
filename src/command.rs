@@ -1,7 +1,9 @@
+#![allow(dead_code)]
+
 use std;
 
 #[derive(Debug)]
-struct Command {
+pub struct Command {
     full_command: String,
     runnable_command: std::process::Command,
 }
@@ -33,9 +35,7 @@ impl Command {
     }
 
     pub fn from(command: &str) -> Option<Command> {
-        println!("{}", command);
         let single_command = Command::first_prefix_match(command);
-        println!("{}", single_command);
 
         if single_command.is_empty() {
             return None;
@@ -47,6 +47,16 @@ impl Command {
             full_command: String::from(single_command),
             runnable_command,
         })
+    }
+
+    pub fn run_command(&mut self, show_output: bool) -> Result<std::process::Child, std::io::Error> {
+        if show_output {
+            self.runnable_command.stdout(std::process::Stdio::inherit());
+        } else {
+            self.runnable_command.stdout(std::process::Stdio::null());
+        }
+        
+        self.runnable_command.spawn()
     }
 }
 

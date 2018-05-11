@@ -7,7 +7,6 @@ extern crate open;
 use std::io::{BufRead, BufReader};
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::prelude::*;
-use std::process;
 use indicatif::{ProgressBar, ProgressStyle};
 use console::style;
 
@@ -120,34 +119,29 @@ fn run_updates(file_path: &String, show_output: bool) {
                     .template(&format!("{command_str} {{spinner}}", command_str = l)),
             );
 
-            let mut collection: Vec<&str> = l.split(" ").collect();
-            // Remove the '$ ' prefix that signifies a command in a file
-            collection.remove(0);
-
-            let mut command = process::Command::new(&collection.remove(0));
-            for part in collection {
-                // Adding additional args from Vec, if any
-                command.arg(part);
-            }
-
-            let mut spawned_command;
             if !show_output {
                 pb.enable_steady_tick(200);
-                spawned_command = command.stdout(process::Stdio::null()).spawn().unwrap();
             } else {
                 pb.finish(); // Finishing spinner prints out the formatted message
-                spawned_command = command.stdout(process::Stdio::inherit()).spawn().unwrap();
             }
+
+            let mut command_child_process = match command::Command::from(&l) {
+                Some(mut val) => match val.run_command(show_output) {
+                    Ok(result) => result,
+                    Err(_) => continue,
+                }
+                None => continue,
+            };
 
             loop {
                 // Loop until the command has finished executing
-                match spawned_command.try_wait() {
+                match command_child_process.try_wait() {
                     Ok(Some(_)) => {
                         if !show_output {
                             pb.finish();
                         }
 
-                        match spawned_command.stdout.as_mut() {
+                        match command_child_process.stdout.as_mut() {
                             Some(val) => {
                                 let mut output = String::new();
                                 val.read_to_string(&mut output)
@@ -238,9 +232,7 @@ fn remove_command_name(file_path: &String, command: &str) -> Result<(), std::io:
 
     // Existence of file has been verified already, so try reading and removing command
     if let Some(i) = BufReader::new(&src_file).lines().position(|line| line.unwrap() == format!("$ {}", command)) {
-        println!("{}", i);
         drop(src_file); // Drop for re-opening in write mode
-        println!("{}", i);
         remove_command_line(file_path, i + 1)?; // Add 1 to i, because line numbers are used instead of indexes
     } else { // If not in Some(i), the command does not exist, so ignore and return Ok(()) as well
         println!("{} The command \"{}\" was not found", StyledMessages::Error.value(), command);
