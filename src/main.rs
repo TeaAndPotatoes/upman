@@ -57,13 +57,13 @@ fn main() {
                 }
             }
         }
-        ("run", run_matches) | ("", run_matches) => {
+        ("run", run_matches) | ("", run_matches) => { // If no subcommand was used it'll match the tuple ("", None)
             let show_output = match run_matches {
                 Some(set) => !set.is_present("silent"),
                 None => true,
             };
             run_updates(&config_filepath, show_output);
-        }, // If no subcommand was used it'll match the tuple ("", None)
+        },
         ("open-config", _) => open_file(config_filepath),
         _ => unreachable!(), // If all subcommands are defined above, anything else is unreachable!()
     }
@@ -128,9 +128,16 @@ fn run_updates(file_path: &String, show_output: bool) {
             let mut command_child_process = match command::Command::from(&l) {
                 Some(mut val) => match val.run_command(show_output) {
                     Ok(result) => result,
-                    Err(_) => continue,
+                    Err(_) => {
+                        println!("{} The current command could not be run.", StyledMessages::Error.value());
+                        println!("        Is the command itself correct?\n");
+                        continue;
+                    },
                 }
-                None => continue,
+                None => {
+                    println!("{} Could not create command from {}\n", StyledMessages::Error.value(), l);
+                    continue;
+                },
             };
 
             loop {
