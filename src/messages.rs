@@ -3,7 +3,7 @@ pub extern crate console;
 use self::console::style;
 use std::fmt::Display;
 
-enum StyledMessages {
+pub enum StyledMessages {
     Error,
 }
 
@@ -11,6 +11,32 @@ impl StyledMessages {
     fn value(&self) -> console::StyledObject<&str> {
         match *self {
             StyledMessages::Error => style("error:").red().bold(),
+        }
+    }
+
+    pub fn length_error(line_num: usize, length: usize) {
+        if length == 0 {
+            println!("        There are currently no command in the config file.");
+            println!("        Use 'upman add <command>' to add a command");
+        } else {
+            let mut error = vec![
+                format!(
+                    "Command number '{}' is out of bounds of config file",
+                    console::style(line_num).yellow()
+                ),
+            ];
+            if line_num - length > 1 {
+                error.push(format!(
+                    "There are currently only {} command in the config file",
+                    console::style(length).green()
+                ));
+            } else {
+                error.push(format!(
+                    "Command numbers start at '{}'",
+                    console::style("1").green()
+                ));
+            }
+            error.print_error();
         }
     }
 }

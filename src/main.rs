@@ -25,7 +25,10 @@ fn main() {
         ("list", _) => list_tools(&config_filepath),
         ("add", Some(add_matches)) => {
             for m in add_matches.values_of("command").unwrap() {
-                add_command(&config_filepath, m);
+                let a = add_matches.value_of("number").unwrap_or("").parse::<usize>();
+                if add_command(&config_filepath, m, a.ok()).is_err() {
+                    format!("Could not add command '{}' to the end of the config file", m).print_error();
+                }
             }
         }
         ("remove", Some(remove_matches)) => {
@@ -172,15 +175,53 @@ fn run_updates(file_path: &String, show_output: bool) {
     }
 }
 
-fn add_command(file_path: &String, command: &str) {
+fn add_command(file_path: &String, command: &str, line_number: Option<usize>) -> Result<(), std::io::Error> {
     let mut file = OpenOptions::new()
         .append(true)
         .create(true)
         .open(file_path)
         .expect("Unable to open or create file at current directory");
 
-    // The prompt for a command is a '$' mark at the beginning of the line
-    write!(file, "$ {}\n", command).expect("Could not write to config file");
+    let prefixed_command = format!("$ {}", command);
+
+    if let Some(line_num) = line_number {
+        
+        // Try to open file at file_path, and create file if not found
+        let src_file = match File::open(&file_path) {
+            Ok(file) => file,
+            Err(_) => OpenOptions::new()
+                .write(true)
+                .read(true)
+                .create(true)
+                .open(&file_path)?,
+        };
+        // Existence of file has been verified already, so try reading and removing command
+        let mut contents: Vec<String> = BufReader::new(&src_file)
+            .lines()
+            .map(|line| line.unwrap())
+            .collect();
+        drop(src_file); // Drop for re-opening in write mode
+
+        let length = contents.len();
+        println!("{} => {} lines long", line_num, length);
+
+        // Vec<T> panics if remove is out of bounds, so check validity of line_number
+        if 1<= line_num && line_num < length {
+            contents.insert(line_num - 1, String::from(prefixed_command));
+        } else if line_num > length {
+            contents.push(String::from(prefixed_command));
+        } else {
+            format!("Line numbers must be greater than '{}'", messages::console::style("1")).print_error();
+        }
+        // Write the contents of `contents` regardless of success of remove
+        write_contents(File::create(&file_path)?, contents.iter());
+
+    } else {
+        // The line_number arg was not passed, so just append to the end of the file
+        write!(file, "{}", prefixed_command)?;
+    }
+
+    Ok(())
 }
 
 fn remove_command_line(file_path: &String, line_number: usize) -> Result<(), std::io::Error> {
@@ -205,29 +246,7 @@ fn remove_command_line(file_path: &String, line_number: usize) -> Result<(), std
     if 1 <= line_number && line_number <= length {
         contents.remove(line_number - 1);
     } else {
-        if length == 0 {
-            println!("        There are currently no command in the config file.");
-            println!("        Use 'upman add <command>' to add a command");
-        } else {
-            let mut error = vec![
-                format!(
-                    "Command number '{}' is out of bounds of config file",
-                    console::style(line_number).yellow()
-                ),
-            ];
-            if line_number - length > 1 {
-                error.push(format!(
-                    "There are currently only {} command in the config file",
-                    console::style(length).green()
-                ));
-            } else {
-                error.push(format!(
-                    "Command numbers start at '{}'",
-                    console::style("1").green()
-                ));
-            }
-            error.print_error();
-        }
+        messages::StyledMessages::length_error(line_number, length);
     }
     // Write the contents of `contents` regardless of success of remove
     write_contents(File::create(&file_path)?, contents.iter());
